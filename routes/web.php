@@ -4,10 +4,13 @@ use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Http\Request;
 use App\Http\Controllers\API\PostController;
 use App\Http\Controllers\RoomController;
 use App\Http\Controllers\RoomObjectController;
 use App\Http\Controllers\ItemController;
+use App\Http\Controllers\PlayerSessionController;
+use App\Http\Controllers\PuzzleController;
 
 Route::get('/', function () {
     return view('welcome');
@@ -95,15 +98,44 @@ Route::prefix('api')->group(function () {
         });
     });
 
-    // Escape Room API Routes
-    Route::prefix('room1')->group(function () {
-        Route::get('/look', [RoomController::class, 'look']);
-        Route::get('/{object}/look', [RoomObjectController::class, 'look']);
-        Route::post('/{object}/{action}', [RoomObjectController::class, 'interact']);
+    // Player Session Management Routes
+    Route::prefix('player')->group(function () {
+        Route::post('/start', [PlayerSessionController::class, 'startGame']);
+        Route::get('/status', [PlayerSessionController::class, 'getStatus']);
+        Route::post('/inventory/{itemKey}', [PlayerSessionController::class, 'updateInventory']);
+        Route::post('/room/{roomKey}', [PlayerSessionController::class, 'updateRoom']);
     });
 
-    Route::prefix('room2')->group(function () {
-        Route::post('/open', [RoomController::class, 'open']);
+    // Puzzle routes
+    Route::prefix('puzzle')->group(function () {
+        Route::post('/combine', [PuzzleController::class, 'combineItems']);
+        Route::post('/{roomKey}/{objectKey}/solve', [PuzzleController::class, 'solvePuzzle']);
+        Route::get('/read/{itemKey}', [PuzzleController::class, 'readItem']);
+    });
+
+    // Room routes (for all available rooms)
+    $roomKeys = ['room1', 'room2', 'room3', 'room4', 'room5', 'exit'];
+    
+    foreach ($roomKeys as $roomKey) {
+        Route::prefix($roomKey)->group(function () use ($roomKey) {
+            Route::get('/look', [RoomController::class, 'look']);
+            if ($roomKey !== 'room1' && $roomKey !== 'exit') {
+                Route::post('/open', [RoomController::class, 'open']);
+            }
+            Route::get('/{object}/look', [RoomObjectController::class, 'look']);
+            Route::get('/{object}/{nestedObject}/look', [RoomObjectController::class, 'lookNested']);
+            Route::post('/{object}/{nestedObject}/{action}', [RoomObjectController::class, 'interactNested']);
+            Route::post('/{object}/{action}', [RoomObjectController::class, 'interact']);
+            Route::post('/{object}/try-code', [RoomObjectController::class, 'tryCode']);
+        });
+    }
+
+    // Add player inventory route
+    Route::get('/inventory', function (Request $request) {
+        $inventory = $request->session()->get('inventory', []);
+        return response()->json([
+            'inventory' => $inventory
+        ]);
     });
 });
 
